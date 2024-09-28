@@ -1,13 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>View Counter App</title>
-</head>
-<body>
-    <h1>Welcome to the View Counter App</h1>
-    <p>Total Views: {{ total_views }}</p>
-    <p>Your IP Address: {{ ip_address }}</p>
-    <p>Your Device Type: {{ device_type }}</p>
-</body>
-</html>
+<!-- counter_app/templates/home.html -->
+
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home - View Counter App{% endblock %}
+
+{% block content %}
+<h1 class="mt-5">Welcome to the View Counter App</h1>
+<p class="lead">Total Views: <strong>{{ total_views }}</strong></p>
+<p>Your IP Address: {{ ip_address }}</p>
+<p>Your Device Type: {{ device_type }}</p>
+<a href="{% url 'dashboard' %}" class="btn btn-primary mt-3">View Dashboard</a>
+{% endblock %}
