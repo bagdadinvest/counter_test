@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - View Counter App{% endblock %}
+{% block extra_css %}
+<style>
+    /* Import the custom font */
+    @font-face {
+        font-family: 'Olney Light';
+        src: url("{% static 'fonts/olney_light.otf' %}") format('opentype');
+    }
+
+    /* Apply custom font to header elements */
+    .custom-header {
+        font-family: 'Olney Light', sans-serif;
+    }
+</style>
+
+
+{% endblock %}
+
+{% block content %}
+<div class="mt-5">
+    <h1 class="custom-header">Dashboard</h1>
+
+    <!-- Live Clock -->
+    <div id="liveClock" class="clock"></div>
+
+    <!-- Hourly View Counts Table -->
+    <div class="mt-4">
+        <h2 class="custom-header">Hourly View Counts (Past Day)</h2>
+        {% if view_data %}
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Hour</th>
+                        <th>View Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in view_data %}
+                    <tr>
+                        <td>{{ entry.date }}</td>
+                        <td>{{ entry.hour }}:00 - {{ entry.hour|add:"1" }}:00</td>
+                        <td>{{ entry.view_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No view count data available.</p>
+        {% endif %}
+    </div>
+
+    <!-- Bar Chart for Hourly View Distribution -->
+    <div class="mt-5">
+        <h2 class="custom-header">Hourly View Distribution</h2>
+        {% if bar_chart %}
+            <img src="data:image/png;base64,{{ bar_chart }}" alt="Hourly View Distribution Bar Chart" class="img-fluid">
+        {% else %}
+            <p>No data available to generate bar chart.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Function to update the live clock
+    function updateClock() {
+        const clockElement = document.getElementById('liveClock');
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const timeString = `${hours}:${minutes}:${seconds}`;
+        clockElement.textContent = `Current Time: ${timeString}`;
+    }
+
+    // Update the clock every second
+    setInterval(updateClock, 1000);
+
+    // Initialize the clock on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        updateClock();  // Initial call to set the clock immediately
+    });
+</script>
+{% endblock %}
