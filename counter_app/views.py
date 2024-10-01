@@ -14,8 +14,10 @@ from django.utils import timezone
 from datetime import timedelta
 from .models import HourlyViewCount, RequestLog, ViewCount, Visitor
 from user_agents import parse
+from django.conf import settings 
+from ipaddress import ip_address, IPv4Address
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-
+from .geoip import update_request_log_with_location_data
 # Configure matplotlib to use the non-GUI backend
 matplotlib.use('Agg')
 
@@ -26,13 +28,10 @@ logger = logging.getLogger(__name__)
 ########################################################## HOME ##################################################################
 ##################################################################################################################################
 
-from ipaddress import ip_address, IPv4Address
-
 def home(request):
     """
     Home view that increments the view count for the current hour and displays recent request logs.
     """
-    # Step 1: Increment Hourly View Count
     now = timezone.now()
     current_date = now.date()
     current_hour = now.hour  # 0-23 representing the hour of the day
@@ -45,20 +44,19 @@ def home(request):
     )
 
     if not created:
-        # Increment the view count if it already exists
         hourly_count.view_count += 1
         hourly_count.save()
 
-    # Step 2: Retrieve Request Logs
+    # Retrieve Request Logs
     recent_requests = RequestLog.objects.all().order_by('-timestamp')
 
-    # Step 3: Retrieve Filter Parameters from the Request
+    # Retrieve Filter Parameters from the Request
     ip_filter = request.GET.get('ip', '').strip()
     device_filter = request.GET.get('device', '').strip()
     start_date = request.GET.get('start_date', '').strip()
     end_date = request.GET.get('end_date', '').strip()
 
-    # Step 4: Apply Filters to the QuerySet
+    # Apply Filters to the QuerySet
     if ip_filter:
         recent_requests = recent_requests.filter(ip_address__icontains=ip_filter)
 
@@ -71,48 +69,16 @@ def home(request):
     if end_date:
         recent_requests = recent_requests.filter(timestamp__date__lte=end_date)
 
-    # Step 5: Annotate and Prepare Data for the Table with Location Information
+    # Annotate and Prepare Data for the Table with Location and ASN Information
     annotated_requests = []
     for req in recent_requests:
+        update_request_log_with_location_data(req)  # Update the location and ASN information
+
         user_agent_parsed = parse(req.user_agent)
-        device_type = 'Desktop'  # Default to Desktop if not recognized
+        device_type = 'Desktop' if user_agent_parsed.is_pc else 'Mobile' if user_agent_parsed.is_mobile else 'Tablet' if user_agent_parsed.is_tablet else 'Other'
 
-        if user_agent_parsed.is_mobile:
-            device_type = 'Mobile'
-        elif user_agent_parsed.is_tablet:
-            device_type = 'Tablet'
-        elif user_agent_parsed.is_pc:
-            device_type = 'Desktop'
-        else:
-            device_type = 'Other'
-
-        # Check if the IP address is a loopback address
-        ip = ip_address(req.ip_address)
-        if isinstance(ip, IPv4Address) and ip.is_loopback:
-            # Skip geolocation lookup for loopback addresses
-            country = 'Localhost'
-            city = 'Localhost'
-        else:
-            # Lookup location information based on the IP address
-            try:
-                obj = IPWhois(req.ip_address)
-                result = obj.lookup_rdap()
-                country = result.get('asn_country_code', 'N/A')
-                city = result.get('network', {}).get('city', 'N/A')  # Get city if available
-            except Exception as e:
-                country = 'Unknown'
-                city = 'Unknown'
-                logger.warning(f"Failed to get location for IP {req.ip_address}: {e}")
-
-        # Save location data to the database
-        req.country = country
-        req.city = city
-        req.save()  # Save the updated record to the database
-
-        # Format headers as pretty-printed JSON
         headers_formatted = json.dumps(json.loads(req.headers), indent=2) if req.headers else 'N/A'
 
-        # Append annotated request to the list with location data
         annotated_requests.append({
             'timestamp': req.timestamp,
             'ip_address': req.ip_address,
@@ -123,32 +89,31 @@ def home(request):
             'referrer': req.referrer or 'N/A',
             'headers': headers_formatted,
             'response_status': req.response_status or 'N/A',
-            'country': country,  # Include country
-            'city': city,  # Include city
+            'country': req.country,  # Include country
+            'city': req.city,  # Include city
+            'asn': req.autonomous_system_number,  # Include ASN number
+            'asn_organization': req.autonomous_system_organization,  # Include ASN organization
         })
 
-    # Step 6: Apply Pagination to Annotated Requests
+    # Apply Pagination
     page = request.GET.get('page', 1)
-    paginator = Paginator(annotated_requests, 10)  # Show 10 logs per page
+    paginator = Paginator(annotated_requests, 10)
 
     try:
         recent_requests_page = paginator.page(page)
     except PageNotAnInteger:
-        recent_requests_page = paginator.page(1)  # Show the first page if page is not an integer
+        recent_requests_page = paginator.page(1)
     except EmptyPage:
-        recent_requests_page = paginator.page(paginator.num_pages)  # Show the last page if page out of range
+        recent_requests_page = paginator.page(paginator.num_pages)
 
-    # Step 7: Prepare Context for the Template
     context = {
-        'hourly_count': hourly_count,  # Hourly view count for the current hour
-        'recent_requests': recent_requests_page,  # Paginated recent requests
-        'ip_filter': ip_filter,  # Applied IP address filter
-        'device_filter': device_filter,  # Applied device type filter
-        'start_date': start_date,  # Applied start date filter
-        'end_date': end_date,  # Applied end date filter
+        'hourly_count': hourly_count,
+        'recent_requests': recent_requests_page,
+        'ip_filter': ip_filter,
+        'device_filter': device_filter,
+        'start_date': start_date,
+        'end_date': end_date,
     }
-
-    # Step 8: Render the Template with the Context Data
     return render(request, 'home.html', context)
 
 

@@ -40,10 +40,14 @@ class RequestLog(models.Model):
     referrer = models.CharField(max_length=256, blank=True, null=True)
     response_status = models.IntegerField(default=200, blank=True, null=True)
     session_key = models.CharField(max_length=40, blank=True, null=True)
-    
-    # New fields to store location data
-    country = models.CharField(max_length=100, blank=True, null=True)  # Store country name or code
-    city = models.CharField(max_length=100, blank=True, null=True)  # Store city name
+
+    # Location-related fields
+    country = models.CharField(max_length=100, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+
+    # ASN-related fields
+    autonomous_system_number = models.IntegerField(blank=True, null=True)  # ASN number
+    autonomous_system_organization = models.CharField(max_length=256, blank=True, null=True)  # ASN organization name
 
     class Meta:
         ordering = ['-timestamp']

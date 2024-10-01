@@ -26,7 +26,7 @@ SECRET_KEY = "django-insecure-c5v3(#ka$tn%#$c2kl8b66xw_7_)5cnq)@@o!s)1r9esy+$yk5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1','beyondclinic.online']
 
 
 # Application definition

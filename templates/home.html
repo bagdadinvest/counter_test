@@ -109,8 +109,10 @@
                                 <th>Referrer</th>
                                 <th>Headers</th>
                                 <th>Status</th>
-                                <th>Country</th> <!-- New column for Country -->
-                                <th>City</th> <!-- New column for City -->
+                                <th>Country</th>
+                                <th>City</th>
+                                <th>ASN Number</th> <!-- New column for ASN Number -->
+                                <th>ASN Organization</th> <!-- New column for ASN Organization -->
                             </tr>
                         </thead>
                         <tbody>
@@ -139,6 +141,8 @@
                                 <td>{{ req.response_status }}</td>
                                 <td>{{ req.country }}</td> <!-- Display country information -->
                                 <td>{{ req.city }}</td> <!-- Display city information -->
+                                <td>{{ req.asn }}</td> <!-- Display ASN Number -->
+                                <td>{{ req.asn_organization }}</td> <!-- Display ASN Organization -->
                             </tr>
                             {% endfor %}
                         </tbody>
