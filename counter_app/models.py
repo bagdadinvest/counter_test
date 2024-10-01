@@ -6,6 +6,7 @@ class ViewCount(models.Model):
     def __str__(self):
         return f"Total Views: {self.total_views}"
 
+
 class Visitor(models.Model):
     ip_address = models.GenericIPAddressField()
     device_type = models.CharField(max_length=50)
@@ -39,6 +40,10 @@ class RequestLog(models.Model):
     referrer = models.CharField(max_length=256, blank=True, null=True)
     response_status = models.IntegerField(default=200, blank=True, null=True)
     session_key = models.CharField(max_length=40, blank=True, null=True)
+    
+    # New fields to store location data
+    country = models.CharField(max_length=100, blank=True, null=True)  # Store country name or code
+    city = models.CharField(max_length=100, blank=True, null=True)  # Store city name
 
     class Meta:
         ordering = ['-timestamp']

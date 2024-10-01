@@ -28,6 +28,12 @@
 <div class="container mt-5">
     <h1 class="custom-header text-center mb-4">Welcome to the View Counter App</h1>
 
+    <!-- Export Buttons -->
+    <div class="text-center mb-4">
+        <a href="{% url 'export_data' 'csv' %}" class="btn btn-info">Download Request Logs as CSV</a>
+        <a href="{% url 'export_data' 'json' %}" class="btn btn-info">Download Request Logs as JSON</a>
+    </div>
+
     <!-- Hourly View Counter Card -->
     <div class="card shadow-sm mb-5">
         <div class="card-header bg-primary text-white">
@@ -49,7 +55,6 @@
             </div>
         </div>
         <div id="liveClock" class="clock"></div>
-
     </div>
 
     <!-- Request Logs Card -->
@@ -104,6 +109,8 @@
                                 <th>Referrer</th>
                                 <th>Headers</th>
                                 <th>Status</th>
+                                <th>Country</th> <!-- New column for Country -->
+                                <th>City</th> <!-- New column for City -->
                             </tr>
                         </thead>
                         <tbody>
@@ -130,6 +137,8 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ req.response_status }}</td>
+                                <td>{{ req.country }}</td> <!-- Display country information -->
+                                <td>{{ req.city }}</td> <!-- Display city information -->
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -182,6 +191,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
 {% block extra_js %}
 <script>
     // Function to update the live clock
@@ -203,7 +214,4 @@
         updateClock();  // Initial call to set the clock immediately
     });
 </script>
-
 {% endblock %}
-{% endblock %}
-

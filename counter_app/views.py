@@ -2,20 +2,22 @@ import io
 import base64
 import csv
 import json
+import logging
 import matplotlib
+import matplotlib.pyplot as plt
+from ipwhois import IPWhois
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.core.serializers import serialize
 from django.utils import timezone
 from datetime import timedelta
-from .models import HourlyViewCount, RequestLog, ViewCount, Visitor  # Import missing models
+from .models import HourlyViewCount, RequestLog, ViewCount, Visitor
 from user_agents import parse
-import matplotlib.pyplot as plt
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-import logging
 
-matplotlib.use('Agg')  # Use the Anti-Grain Geometry backend for non-GUI rendering
+# Configure matplotlib to use the non-GUI backend
+matplotlib.use('Agg')
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -24,11 +26,13 @@ logger = logging.getLogger(__name__)
 ########################################################## HOME ##################################################################
 ##################################################################################################################################
 
+from ipaddress import ip_address, IPv4Address
 
 def home(request):
     """
     Home view that increments the view count for the current hour and displays recent request logs.
     """
+    # Step 1: Increment Hourly View Count
     now = timezone.now()
     current_date = now.date()
     current_hour = now.hour  # 0-23 representing the hour of the day
@@ -45,16 +49,16 @@ def home(request):
         hourly_count.view_count += 1
         hourly_count.save()
 
-    # Retrieve recent request logs (e.g., last 20 entries)
-    recent_requests = RequestLog.objects.all().order_by('-timestamp')[:20]
+    # Step 2: Retrieve Request Logs
+    recent_requests = RequestLog.objects.all().order_by('-timestamp')
 
-    # Retrieve filter parameters
+    # Step 3: Retrieve Filter Parameters from the Request
     ip_filter = request.GET.get('ip', '').strip()
     device_filter = request.GET.get('device', '').strip()
     start_date = request.GET.get('start_date', '').strip()
     end_date = request.GET.get('end_date', '').strip()
 
-    # Apply filters to recent request logs
+    # Step 4: Apply Filters to the QuerySet
     if ip_filter:
         recent_requests = recent_requests.filter(ip_address__icontains=ip_filter)
 
@@ -67,7 +71,7 @@ def home(request):
     if end_date:
         recent_requests = recent_requests.filter(timestamp__date__lte=end_date)
 
-    # Annotate each request with device type using django-user-agents
+    # Step 5: Annotate and Prepare Data for the Table with Location Information
     annotated_requests = []
     for req in recent_requests:
         user_agent_parsed = parse(req.user_agent)
@@ -82,10 +86,33 @@ def home(request):
         else:
             device_type = 'Other'
 
+        # Check if the IP address is a loopback address
+        ip = ip_address(req.ip_address)
+        if isinstance(ip, IPv4Address) and ip.is_loopback:
+            # Skip geolocation lookup for loopback addresses
+            country = 'Localhost'
+            city = 'Localhost'
+        else:
+            # Lookup location information based on the IP address
+            try:
+                obj = IPWhois(req.ip_address)
+                result = obj.lookup_rdap()
+                country = result.get('asn_country_code', 'N/A')
+                city = result.get('network', {}).get('city', 'N/A')  # Get city if available
+            except Exception as e:
+                country = 'Unknown'
+                city = 'Unknown'
+                logger.warning(f"Failed to get location for IP {req.ip_address}: {e}")
+
+        # Save location data to the database
+        req.country = country
+        req.city = city
+        req.save()  # Save the updated record to the database
+
         # Format headers as pretty-printed JSON
         headers_formatted = json.dumps(json.loads(req.headers), indent=2) if req.headers else 'N/A'
 
-        # Append annotated request to the list
+        # Append annotated request to the list with location data
         annotated_requests.append({
             'timestamp': req.timestamp,
             'ip_address': req.ip_address,
@@ -96,33 +123,34 @@ def home(request):
             'referrer': req.referrer or 'N/A',
             'headers': headers_formatted,
             'response_status': req.response_status or 'N/A',
+            'country': country,  # Include country
+            'city': city,  # Include city
         })
 
-    # Pagination settings for annotated requests
+    # Step 6: Apply Pagination to Annotated Requests
     page = request.GET.get('page', 1)
     paginator = Paginator(annotated_requests, 10)  # Show 10 logs per page
 
     try:
         recent_requests_page = paginator.page(page)
     except PageNotAnInteger:
-        recent_requests_page = paginator.page(1)  # Show the first page
+        recent_requests_page = paginator.page(1)  # Show the first page if page is not an integer
     except EmptyPage:
-        recent_requests_page = paginator.page(paginator.num_pages)  # Show the last page if out of range
+        recent_requests_page = paginator.page(paginator.num_pages)  # Show the last page if page out of range
 
-    # Debug statements for development (optional, remove in production)
-    print(f"Hourly Count: {hourly_count.view_count}")
-    print(f"Total Requests in Page: {len(recent_requests_page)}")
-
-    # Context dictionary to pass to the template
+    # Step 7: Prepare Context for the Template
     context = {
-        'hourly_count': hourly_count,
-        'recent_requests': recent_requests_page,
-        'ip_filter': ip_filter,
-        'device_filter': device_filter,
-        'start_date': start_date,
-        'end_date': end_date,
+        'hourly_count': hourly_count,  # Hourly view count for the current hour
+        'recent_requests': recent_requests_page,  # Paginated recent requests
+        'ip_filter': ip_filter,  # Applied IP address filter
+        'device_filter': device_filter,  # Applied device type filter
+        'start_date': start_date,  # Applied start date filter
+        'end_date': end_date,  # Applied end date filter
     }
+
+    # Step 8: Render the Template with the Context Data
     return render(request, 'home.html', context)
+
 
 ##################################################################################################################################
 ########################################################## TOOLS #################################################################
@@ -143,24 +171,34 @@ def reset_database(request):
 def export_data(request, format_type):
     """View to handle exporting data in various formats."""
     if format_type == 'csv':
-        # Export Visitor data to CSV
+        # Export RequestLog data to CSV
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="visitors.csv"'
+        response['Content-Disposition'] = 'attachment; filename="request_logs.csv"'
         writer = csv.writer(response)
-        writer.writerow(['IP Address', 'Device Type', 'Visit Time'])  # Write CSV header
-        for visitor in Visitor.objects.all():
-            writer.writerow([visitor.ip_address, visitor.device_type, visitor.visit_time])
+        writer.writerow(['Timestamp', 'IP Address', 'Device Type', 'User Agent', 'Path', 'Method', 'Referrer', 'Status', 'Country', 'City'])  # CSV Header
+        for req in RequestLog.objects.all():
+            try:
+                # Lookup location data for each request
+                obj = IPWhois(req.ip_address)
+                result = obj.lookup_rdap()
+                country = result.get('asn_country_code', 'N/A')
+                city = result.get('network', {}).get('city', 'N/A')
+            except Exception as e:
+                country = 'Unknown'
+                city = 'Unknown'
+
+            writer.writerow([req.timestamp, req.ip_address, req.user_agent, req.path, req.method, req.referrer, req.response_status, country, city])
         return response
 
     elif format_type == 'json':
-        # Export Visitor data to JSON
-        data = serialize('json', Visitor.objects.all())
+        # Export RequestLog data to JSON
+        data = serialize('json', RequestLog.objects.all())
         response = HttpResponse(data, content_type='application/json')
-        response['Content-Disposition'] = 'attachment; filename="visitors.json"'
+        response['Content-Disposition'] = 'attachment; filename="request_logs.json"'
         return response
 
-    # Add more formats if needed (e.g., XML)
     return HttpResponse("Unsupported format", status=400)
+
 
 ##################################################################################################################################
 ########################################################## DASHBOARD #############################################################
